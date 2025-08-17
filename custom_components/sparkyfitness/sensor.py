@@ -10,7 +10,7 @@ from .const import DOMAIN
 from .sparky_api import SparkyFitnessAPI
 
 SENSOR_TYPES = {
-    # Goals and progress fields (water and exercise removed)
+    # Goals and progress fields (water and exercise removed, but water intake current added)
     "calories": {"name": "Calories", "unit": "kcal"},
     "protein": {"name": "Protein", "unit": "g"},
     "carbs": {"name": "Carbohydrates", "unit": "g"},
@@ -28,6 +28,7 @@ SENSOR_TYPES = {
     "vitamin_c": {"name": "Vitamin C", "unit": "mg"},
     "calcium": {"name": "Calcium", "unit": "mg"},
     "iron": {"name": "Iron", "unit": "mg"},
+    "water": {"name": "Water", "unit": "ml"},
 }
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
@@ -41,9 +42,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     async def async_update_data():
         goals = await api.async_get_goals_for_today(token)
         progress = {}
+        water_intake = None
+        from datetime import date
+        today = date.today().isoformat()
         if user_id:
             progress = await api.async_get_progress_for_today(token, user_id)
-        return {"goals": goals, "progress": progress}
+            try:
+                water_data = await api.async_get_water_intake(token, today)
+                water_intake = float(water_data.get("water_ml", 0))
+            except Exception:
+                water_intake = None
+        return {"goals": goals, "progress": progress, "water_intake": water_intake}
 
     coordinator = DataUpdateCoordinator(
         hass,
@@ -56,9 +65,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
     sensors = []
     for key, meta in SENSOR_TYPES.items():
-        sensors.append(SparkyFitnessSensor(coordinator, key, meta, "goals"))
-        sensors.append(SparkyFitnessSensor(coordinator, key, meta, "progress"))
+        if key == "water":
+            sensors.append(SparkyFitnessWaterIntakeSensor(coordinator, key, meta))
+            sensors.append(SparkyFitnessSensor(coordinator, "water_goal_ml", meta, "goals"))
+        else:
+            sensors.append(SparkyFitnessSensor(coordinator, key, meta, "goals"))
+            sensors.append(SparkyFitnessSensor(coordinator, key, meta, "progress"))
     async_add_entities(sensors)
+
+class SparkyFitnessWaterIntakeSensor(CoordinatorEntity, SensorEntity):
+    def __init__(self, coordinator, key, meta):
+        super().__init__(coordinator)
+        self._key = key
+        self._meta = meta
+        self._attr_name = f"{meta['name']} Current"
+        self._attr_native_unit_of_measurement = meta["unit"]
+        self._attr_unique_id = f"sparkyfitness_water_intake_current"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("water_intake")
+
+    @property
+    def available(self):
+        return self.coordinator.data.get("water_intake") is not None
 
 class SparkyFitnessSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator, key, meta, source):
