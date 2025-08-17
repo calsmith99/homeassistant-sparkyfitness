@@ -1,0 +1,10 @@
+{
+  "domain": "sparkyfitness",
+  "name": "SparkyFitness Integration",
+  "version": "0.0.1",
+  "documentation": "https://github.com/yourusername/sparkyfitness",
+  "requirements": [],
+  "codeowners": ["@yourusername"],
+  "config_flow": true,
+  "iot_class": "cloud_polling"
+}
