@@ -18,13 +18,18 @@ class SparkyFitnessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             api = SparkyFitnessAPI(base_url=user_input["base_url"])
             try:
                 token = await api.async_login(user_input["email"], user_input["password"])
+                user_info = await api.async_get_user_info(token)
+                user_id = user_info.get("userId") or user_info.get("id")
+                if not user_id:
+                    raise Exception("User ID not found in user info")
             except Exception:
                 errors["base"] = "auth_failed"
             else:
                 return self.async_create_entry(title=user_input["email"], data={
                     "email": user_input["email"],
                     "token": token,
-                    "base_url": user_input["base_url"]
+                    "base_url": user_input["base_url"],
+                    "user_id": user_id
                 })
         return self.async_show_form(
             step_id="user",
